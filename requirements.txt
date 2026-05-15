@@ -1,10 +1,16 @@
-tensorflow>=2.17
-keras>=3.5
-scikit-learn>=1.5
-pandas>=2.2
-numpy>=1.26
-matplotlib>=3.9
-seaborn>=0.13
-datasets>=3.0
+# Dependencies pour la webapp Streamlit Cloud (et le training local si besoin).
+# Streamlit Cloud requires Python 3.11 ou 3.12 (TensorFlow n'a pas encore de
+# wheels pour Python 3.13/3.14). Le choix de Python se fait dans
+# Advanced settings -> Python version sur share.streamlit.io.
+
 streamlit>=1.39
+tensorflow==2.17.0
+keras>=3.5,<3.6
+keras-preprocessing>=1.1.2
+scikit-learn>=1.5,<2.0
+numpy>=1.26,<2.0
+pandas>=2.2,<3.0
+joblib>=1.4
 huggingface-hub>=0.25
+plotly>=5.20
+streamlit-extras>=0.4
