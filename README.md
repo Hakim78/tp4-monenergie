@@ -1,80 +1,91 @@
-# TP4 - RNN, LSTM, Séries temporelles, Déploiement
+# TP4 - MonÉnergie : forecast et analyse de la consommation française
 
-Livrables de la journée J4 du parcours MIA4 Deep Learning.
+Sujet libre TP4, fil rouge énergie : application qui aide les ménages français
+à prévoir leur consommation, comprendre leur profil énergétique et choisir un
+fournisseur grâce à l'analyse d'avis. Modèles RNN/LSTM + déploiement Streamlit.
 
-## Contenu
+## Vision commerciale
 
-| Fichier | Phases | Description |
+| Élément | Valeur |
+|---|---|
+| Cible primaire | 15M propriétaires de maison FR + 20M locataires |
+| Niche FR | Crise énergétique post-2022, marché sensibilisé |
+| Pricing cible | 4,99-9,99€/mois (B2C) - 49€/mois (B2B artisans/syndics) |
+| ROI utilisateur | -200 à -500€/an de facture pour 60-120€/an d'abonnement |
+| Concurrence | Hello Watt (gratuit ad), Selectra (commission), aucun DL grand public |
+
+## Pipeline pédagogique (8 phases)
+
+| Phase | Dataset | Modèle | Sortie business |
+|---|---|---|---|
+| 1+2 | Household Power Consumption (UCI Sceaux FR, 2M lignes) | LSTM forecast 24h | Prédiction conso de demain pour adapter chauffage |
+| 3 | Idem | GRU vs LSTM benchmark | Choix archi pour déploiement mobile (GRU plus léger) |
+| 4+5 | Allociné Reviews (HF, 200k avis FR) | Bi-LSTM sentiment FR | Modèle générique transférable aux avis Trustpilot fournisseurs |
+| 6 | Household Power agrégé | LSTM multiclass | Classifie le profil énergétique d'un ménage (4 classes) |
+| 7 | Modèles précédents | Streamlit | App MonÉnergie : upload courbe → forecast + profil |
+| 8 | - | Logging + déploiement | Streamlit Cloud + audit CSV des inférences |
+
+## Datasets
+
+| Fichier source | Téléchargement Kaggle | Volume |
 |---|---|---|
-| [phase1_2_airline_lstm.py](phase1_2_airline_lstm.py) | 1 + 2 | Airline Passengers : sliding window + LSTM training + RMSE + plot |
-| [phase3_gru_vs_lstm.py](phase3_gru_vs_lstm.py) | 3 | Benchmark cross-architecture GRU vs LSTM sur le même dataset |
-| [phase4_5_imdb_bilstm.py](phase4_5_imdb_bilstm.py) | 4 + 5 | IMDB sentiment : tokenization + Embedding + Bidirectional LSTM |
-| [phase6_ag_news_multiclass.py](phase6_ag_news_multiclass.py) | 6 | AG News 4 classes : LSTM + softmax + multiclasse |
-| [webapp/app.py](webapp/app.py) | 7 | Streamlit WebApp pour l'inférence IMDB |
-| [webapp/log_inference.py](webapp/log_inference.py) | 8 | Logging CSV piste B |
-| [results.md](results.md) | 3 | Tableau comparatif LSTM vs GRU à remplir |
+| `household_power_consumption.txt` | Kaggle dataset `uciml/electric-power-consumption-data-set` | 130 MB compressé |
+| `allocine` | HuggingFace `tblard/allocine` (auto via `datasets`) | 200k reviews |
 
-## Format des fichiers
+## Workflow Kaggle (stockage local plein)
 
-Les fichiers `.py` utilisent la syntaxe **VSCode interactive** (`# %%` pour séparer les cellules). Trois façons de les exécuter :
+Pour chaque script `phase*.py` :
 
-1. **VSCode / Cursor** : ouvrir le fichier → cliquer "Run Cell" au-dessus de chaque `# %%`
-2. **Jupyter classique** : `jupytext --to ipynb phase1_2_airline_lstm.py` puis ouvrir l'`.ipynb`
-3. **Kaggle** : copier-coller chaque cellule dans un notebook Kaggle (recommandé si stockage local plein)
-
-## Workflow Kaggle recommandé
-
-Vu que les datasets sont petits (Airline 144 points, IMDB 50k reviews, AG News 120k titres), un seul kernel Kaggle suffit pour chaque section :
-
-1. Créer un notebook Kaggle vide
-2. Activer le GPU si dispo (P100 / T4 gratuit)
-3. Coller les cellules du fichier `.py` une par une
-4. À la fin, télécharger les modèles `.keras` depuis `/kaggle/working/`
-5. Pousser sur HuggingFace Hub privé pour la WebApp
+1. **Nouveau notebook Kaggle**, accélérateur GPU T4 x2 (gratuit) pour phases 4-6
+2. **Add Data** (panneau de droite) → chercher `electric-power-consumption-data-set` pour les phases conso
+3. **Coller les cellules `# %%` une par une**
+4. Lancer **Run All**
+5. Quand le script affiche "Modele sauve : *.keras", téléchargez depuis `/kaggle/working/`
+6. Place le `.keras` dans `TP4/tp/` localement
+7. Commit + push
 
 ## Commits par phase
 
-Conformément aux règles de notation, **un commit par phase** :
-
 ```bash
-git add phase1_2_airline_lstm.py
-git commit -m "feat: phase1 sliding window airline passengers"
+git add phase1_2_energie_lstm.py
+git commit -m "feat: phase1 sliding window household power consumption"
 
-git add phase1_2_airline_lstm.py airline_lstm.keras
-git commit -m "feat: phase2 lstm airline passengers training"
+git add energie_lstm.keras results.md
+git commit -m "feat: phase2 lstm forecast conso electrique 24h"
 
-git add phase3_gru_vs_lstm.py results.md
-git commit -m "feat: phase3 gru vs lstm comparison airline passengers"
+git add phase3_gru_vs_lstm.py energie_gru.keras
+git commit -m "feat: phase3 gru vs lstm comparison conso energie"
 
-git add phase4_5_imdb_bilstm.py
-git commit -m "feat: phase4 imdb tokenization embedding"
+git add phase4_5_allocine_bilstm.py
+git commit -m "feat: phase4 allocine tokenization embedding"
 
-git add phase4_5_imdb_bilstm.py imdb_sentiment.keras
-git commit -m "feat: phase5 imdb bidirectional lstm training"
+git add phase4_5_allocine_bilstm.py allocine_sentiment.keras
+git commit -m "feat: phase5 allocine bidirectional lstm french sentiment"
 
-git add phase6_ag_news_multiclass.py
-git commit -m "feat: phase6 ag_news multiclass lstm"
+git add phase6_profil_consommateur.py profil_conso.keras
+git commit -m "feat: phase6 classification profil consommateur 4 classes"
 
-git add webapp/app.py imdb_sentiment.keras
-git commit -m "feat: phase7 streamlit webapp imdb inference"
+git add webapp/app.py energie_lstm.keras profil_conso.keras
+git commit -m "feat: phase7 streamlit MonEnergie webapp"
 
 git add webapp/log_inference.py webapp/README.md
-git commit -m "feat: phase8 inference logging csv + deploy doc"
+git commit -m "feat: phase8 inference logging csv + streamlit cloud doc"
 ```
 
-## Déploiement Streamlit Cloud (Phase 8 Piste A)
+## Déploiement WebApp (Phase 7-8)
 
-Voir [webapp/README.md](webapp/README.md) pour le pas-à-pas. Résumé :
+Streamlit Cloud (gratuit) : voir [webapp/README.md](webapp/README.md).
+Sans installation locale : push GitHub → connect Streamlit Cloud → URL publique.
 
-1. Pousser ce repo public sur GitHub avec `app.py` + `imdb_sentiment.keras`
-2. Aller sur https://share.streamlit.io → "New app"
-3. Sélectionner le repo, le branch, le fichier `webapp/app.py`
-4. Build automatique, URL publique partageable en 2 min
+## Datasets / open data utilisables ensuite pour la prod
 
-## Dépendances
+| Source | Donnée | Licence |
+|---|---|---|
+| Enedis Open Data | Conso régionale/communale temps réel | Etalab 2.0 |
+| RTE Open Data | Production/conso FR nationale | Etalab 2.0 |
+| GRDF Open Data | Conso gaz par maille | Etalab 2.0 |
+| ADEME ObsDPE | 18M DPE avec étiquette A-G | Etalab 2.0 |
+| INSEE | Revenus, composition ménages | Etalab 2.0 |
+| Trustpilot | Avis EDF/Engie/TotalEnergies | Scrapping (avec ToS prudent) |
 
-Voir [requirements.txt](requirements.txt). Sur Kaggle, tout est pré-installé sauf `datasets` (pour AG News) :
-
-```python
-!pip install datasets
-```
+Tout est gratuit et ouvert. Aucune licence commerciale à négocier.
