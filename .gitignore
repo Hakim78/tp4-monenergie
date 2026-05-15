@@ -1,0 +1,42 @@
+# Modeles Keras (gros, regenerables depuis les notebooks)
+# Commenter cette ligne pour committer les modeles avec les phases qui les exigent
+# *.keras
+
+# Logs d'inference (locaux, jamais a committer)
+inference_log.csv
+
+# Cache Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Environnements
+.venv/
+venv/
+env/
+.env
+.env.local
+
+# Notebooks Jupyter generes par jupytext
+*.ipynb
+!notebooks/*.ipynb
+
+# Donnees telechargees localement
+data/
+*.csv
+!results.md
+!data/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Streamlit
+.streamlit/secrets.toml
