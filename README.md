@@ -77,15 +77,54 @@ git commit -m "feat: phase8 inference logging csv + streamlit cloud doc"
 Streamlit Cloud (gratuit) : voir [webapp/README.md](webapp/README.md).
 Sans installation locale : push GitHub → connect Streamlit Cloud → URL publique.
 
-## Datasets / open data utilisables ensuite pour la prod
+## Roadmap data : V1 → V2 → V3
 
-| Source | Donnée | Licence |
+Le TP4 est un **proof-of-concept** sur un seul foyer (UCI Sceaux, données publiques). Voici comment la stack data évolue ensuite vers un produit commercial réel.
+
+### V1 — Aujourd'hui (TP4, training)
+
+| Source | Pourquoi | Licence |
 |---|---|---|
-| Enedis Open Data | Conso régionale/communale temps réel | Etalab 2.0 |
-| RTE Open Data | Production/conso FR nationale | Etalab 2.0 |
-| GRDF Open Data | Conso gaz par maille | Etalab 2.0 |
-| ADEME ObsDPE | 18M DPE avec étiquette A-G | Etalab 2.0 |
-| INSEE | Revenus, composition ménages | Etalab 2.0 |
-| Trustpilot | Avis EDF/Engie/TotalEnergies | Scrapping (avec ToS prudent) |
+| UCI Sceaux Household Power | Seul dataset open avec courbe minute-par-minute individuelle française sur 4 ans | CC0 |
+| Allociné Reviews (HF) | Bi-LSTM sentiment FR transférable aux avis Trustpilot fournisseurs | Public |
+| Météo France API (optionnel) | Features température pour le forecast | Etalab 2.0 |
 
-Tout est gratuit et ouvert. Aucune licence commerciale à négocier.
+→ Démontre que la pipeline LSTM marche. Pas encore commercialisable.
+
+### V2 — MVP commercial (3-6 mois)
+
+Le pivot clé : passer de "1 foyer historique" à "N utilisateurs réels".
+
+| Source | Usage | Comment |
+|---|---|---|
+| **API Conso&Henry / Linky** | Récupérer les courbes individuelles des utilisateurs consentants | OAuth via [Datahub Enedis](https://datahub-enedis.fr/data-connect/documentation/). 30s d'auth, données minute-par-minute sur 3 ans |
+| **Enedis Open Data** | Benchmarks "votre conso vs voisins" type T3 électrique | Conso annuelle par IRIS, profilage par type de logement |
+| **Météo France** | Features DJU/température en features du modèle | API gratuite, station la plus proche du code postal |
+| **ADEME ObsDPE** | Cross-référencer le DPE du logement | 18M DPE A-G en open data |
+
+→ Stade commercial : 4,99€/mois B2C, mise en avant "connectez votre Linky, gagnez 200€/an".
+
+### V3 — Scale (12-24 mois)
+
+| Source | Usage |
+|---|---|
+| **GRDF Open Data** | Étendre au gaz (~11M ménages chauffés gaz FR) |
+| **GreenSpark API** | Intégration capteurs IoT (panneaux solaires, batteries domestiques) |
+| **Trustpilot scraping (modéré)** | Sentiment fournisseurs en temps réel (module "Quel fournisseur choisir") |
+| **INSEE Filosofi** | Croiser revenus de l'IRIS pour adapter les recos (un foyer modeste vs aisé n'ont pas les mêmes leviers) |
+
+→ Stade scale : 9,99€/mois B2C + 49€/mois B2B (syndics, bailleurs sociaux, artisans).
+
+## Aspects légaux et RGPD
+
+- Les courbes Linky restent la **propriété de l'utilisateur**. Tu accèdes via OAuth avec consentement explicit (révocable).
+- Aucune courbe individuelle Enedis n'est publique (le RGPD interdit). Tout ce qui est en Open Data est **agrégé** par IRIS/commune/profil.
+- L'agrégat Enedis Open Data permet du **benchmarking comparatif** sans toucher aux données individuelles d'autres ménages.
+- **DPO obligatoire** au-delà de 250 utilisateurs actifs (peut être externalisé ~3000€/an).
+
+## Pourquoi cette stack rend MonÉnergie défendable
+
+1. **API Linky = barrière à l'entrée**. Hello Watt et Selectra l'utilisent, mais aucun ne fait du Deep Learning par-dessus pour personnaliser le forecast (ils font du SQL simple).
+2. **Données 100% françaises** = avantage GDPR + AI Act EU (hébergement EU obligatoire = moat vs concurrents US/CN).
+3. **Triple modèle (forecast + profil + sentiment)** = l'app couvre 3 use cases sur 1 acquisition utilisateur. ARPU augmenté.
+4. **Open data Etalab 2.0** = pas de licence à payer, **0€ de COGS** sur les benchmarks et features externes.
