@@ -145,18 +145,53 @@ hourly["hour_sin"] = np.sin(2 * np.pi * hourly.index.hour / 24)
 hourly["hour_cos"] = np.cos(2 * np.pi * hourly.index.hour / 24)
 hourly["is_weekend"] = (hourly.index.dayofweek >= 5).astype(int)
 
-# Visualisation : conso journaliere moyenne
+# Visualisation 1 : conso journaliere moyenne sur 4 ans
 plt.figure(figsize=(12, 4))
-hourly["active_kw"].resample("D").mean().plot()
-plt.title("Consommation electrique journaliere moyenne - Sceaux FR")
+hourly["active_kw"].resample("D").mean().plot(color="#0ea5e9")
+plt.title("Consommation electrique journaliere moyenne - Sceaux FR (2006-2010)")
 plt.ylabel("Puissance active (kW)")
+plt.xlabel("Date")
 plt.grid(True, alpha=0.3)
 plt.tight_layout()
-plt.savefig(OUTPUT_DIR / "fig_phase1_conso_journaliere.png", dpi=100)
+plt.savefig(OUTPUT_DIR / "fig_phase1_conso_journaliere.png", dpi=100, bbox_inches="tight")
 plt.show()
 
 print(f"Apres aggregation horaire : {hourly.shape}")
 print(hourly.head())"""))
+
+cells.append(code("""# Visualisation 2 : distribution active_kw (histogramme)
+fig, ax = plt.subplots(figsize=(10, 4))
+hourly["active_kw"].hist(bins=80, ax=ax, color="#0ea5e9", alpha=0.75, edgecolor="white")
+mean_v = float(hourly["active_kw"].mean())
+median_v = float(hourly["active_kw"].median())
+ax.axvline(mean_v, color="#ef4444", linestyle="--", linewidth=2, label=f"Moyenne {mean_v:.2f} kW")
+ax.axvline(median_v, color="#10b981", linestyle="--", linewidth=2, label=f"Mediane {median_v:.2f} kW")
+ax.set_xlabel("Puissance active (kW)")
+ax.set_ylabel("Frequence")
+ax.set_title(f"Distribution conso horaire - {len(hourly):,} heures sur 4 ans (skew {hourly['active_kw'].skew():.2f})")
+ax.legend()
+ax.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.savefig(OUTPUT_DIR / "fig_phase1_distribution.png", dpi=100, bbox_inches="tight")
+plt.show()
+
+# Visualisation 3 : pattern horaire moyen + ecart-type
+pattern = hourly.groupby(hourly.index.hour)["active_kw"].agg(["mean", "std"])
+fig, ax = plt.subplots(figsize=(10, 4))
+ax.plot(pattern.index, pattern["mean"], color="#0ea5e9", linewidth=2.5, marker="o", markersize=5)
+ax.fill_between(
+    pattern.index, pattern["mean"] - pattern["std"], pattern["mean"] + pattern["std"],
+    color="#0ea5e9", alpha=0.2, label="+/- 1 std"
+)
+ax.set_xlabel("Heure de la journee")
+ax.set_ylabel("Puissance moyenne (kW)")
+ax.set_title("Pattern horaire moyen (4 ans) - pics matin (7h) et soir (20h)")
+ax.set_xticks(range(0, 24, 3))
+ax.legend()
+ax.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.savefig(OUTPUT_DIR / "fig_phase1_hourly_pattern.png", dpi=100, bbox_inches="tight")
+plt.show()"""))
 
 cells.append(code("""# Features + target + split temporel 80/20
 FEATURES = ["active_kw", "sub1_wh", "sub2_wh", "sub3_wh", "hour_sin", "hour_cos", "is_weekend"]
@@ -240,30 +275,64 @@ print(f"RMSE test  : {rmse_test:.3f} kW")
 print(f"MAE test   : {mae_test:.3f} kW")
 print(f"Conso moy ref : {train_df[TARGET].mean():.2f} kW")"""))
 
-cells.append(code("""# Figure : courbes de loss
+cells.append(code("""# Figure 1 : courbes de loss
 plt.figure(figsize=(10, 4))
-plt.plot(history_lstm.history["loss"], label="train loss")
-plt.plot(history_lstm.history["val_loss"], label="val loss")
+plt.plot(history_lstm.history["loss"], label="train loss", color="#0ea5e9", linewidth=2)
+plt.plot(history_lstm.history["val_loss"], label="val loss", color="#10b981", linewidth=2)
 plt.xlabel("Epoch")
 plt.ylabel("MSE")
 plt.title("Phase 2 : Convergence LSTM forecast")
 plt.legend()
 plt.grid(True, alpha=0.3)
 plt.tight_layout()
-plt.savefig(OUTPUT_DIR / "fig_phase2_loss.png", dpi=100)
+plt.savefig(OUTPUT_DIR / "fig_phase2_loss.png", dpi=100, bbox_inches="tight")
 plt.show()
 
-# Figure : prediction vs reel
+# Figure 2 : prediction vs reel sur 200h test
 plt.figure(figsize=(13, 4))
-plt.plot(y_test_inv[:200], label="Reel", linewidth=1.3, color="black")
-plt.plot(test_pred_inv[:200], label="Predit", linewidth=1.3, color="tab:orange")
+plt.plot(y_test_inv[:200], label="Reel", linewidth=1.5, color="black")
+plt.plot(test_pred_inv[:200], label="Predit", linewidth=1.5, color="#f59e0b")
 plt.xlabel("Heure (test set)")
 plt.ylabel("Conso moy. 24h (kW)")
-plt.title(f"Phase 2 : LSTM forecast - RMSE {rmse_test:.2f} kW")
+plt.title(f"Phase 2 : LSTM forecast - RMSE test {rmse_test:.3f} kW")
 plt.legend()
 plt.grid(True, alpha=0.3)
 plt.tight_layout()
-plt.savefig(OUTPUT_DIR / "fig_phase2_forecast.png", dpi=100)
+plt.savefig(OUTPUT_DIR / "fig_phase2_forecast.png", dpi=100, bbox_inches="tight")
+plt.show()"""))
+
+cells.append(code("""# Diagnostic figures : residuals + scatter pred vs true
+residuals = (test_pred_inv - y_test_inv).flatten()
+
+# Histogramme des erreurs (devrait etre approx normal centre sur 0)
+fig, ax = plt.subplots(figsize=(10, 4))
+ax.hist(residuals, bins=60, color="#10b981", alpha=0.75, edgecolor="white")
+ax.axvline(0, color="black", linestyle="--", alpha=0.6, linewidth=2, label="0 (cible)")
+ax.axvline(residuals.mean(), color="#ef4444", linestyle=":", linewidth=2,
+           label=f"Moyenne {residuals.mean():.3f}")
+ax.set_xlabel("Erreur de prediction (kW)")
+ax.set_ylabel("Frequence")
+ax.set_title(f"Phase 2 : Distribution des residus - std {residuals.std():.3f} kW")
+ax.legend()
+ax.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.savefig(OUTPUT_DIR / "fig_phase2_residuals.png", dpi=100, bbox_inches="tight")
+plt.show()
+
+# Scatter pred vs true (qualite du fit globale)
+fig, ax = plt.subplots(figsize=(7, 7))
+ax.scatter(y_test_inv.flatten(), test_pred_inv.flatten(),
+           alpha=0.35, s=12, color="#0ea5e9", edgecolors="none")
+mx = float(max(y_test_inv.max(), test_pred_inv.max()))
+ax.plot([0, mx], [0, mx], "r--", linewidth=2, label="y = x (perfect)")
+ax.set_xlabel("Conso reelle (kW)")
+ax.set_ylabel("Conso predite (kW)")
+ax.set_title(f"Phase 2 : Predictions vs realite - RMSE {rmse_test:.3f} kW")
+ax.set_aspect("equal", "box")
+ax.legend()
+ax.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.savefig(OUTPUT_DIR / "fig_phase2_scatter_pred_true.png", dpi=100, bbox_inches="tight")
 plt.show()"""))
 
 cells.append(code("""# Sauvegarde modele + scalers
@@ -386,6 +455,25 @@ X_test_nlp = pad_sequences(tokenizer.texts_to_sequences(test_texts), maxlen=MAX_
 print(f"X_train_nlp : {X_train_nlp.shape}")
 print(f"X_test_nlp  : {X_test_nlp.shape}")"""))
 
+cells.append(code("""# EDA NLP : distribution des longueurs de reviews
+seq_lens = [len(s.split()) for s in train_texts[:15000]]
+
+fig, ax = plt.subplots(figsize=(10, 4))
+ax.hist(seq_lens, bins=80, color="#f59e0b", alpha=0.75, edgecolor="white")
+ax.axvline(MAX_LEN, color="#ef4444", linestyle="--", linewidth=2,
+           label=f"Padding max ({MAX_LEN} tokens)")
+ax.axvline(np.median(seq_lens), color="#10b981", linestyle=":", linewidth=2,
+           label=f"Mediane {int(np.median(seq_lens))} tokens")
+ax.set_xlabel("Nombre de tokens par review")
+ax.set_ylabel("Frequence")
+ax.set_title(f"Distribution longueurs reviews Allocine - {len(seq_lens):,} echantillons train")
+ax.set_xlim(0, 800)
+ax.legend()
+ax.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.savefig(OUTPUT_DIR / "fig_phase5_review_lengths.png", dpi=100, bbox_inches="tight")
+plt.show()"""))
+
 cells.append(code("""# Architecture Bi-LSTM
 model_sentiment = keras.Sequential([
     layers.Input(shape=(MAX_LEN,)),
@@ -449,17 +537,39 @@ joblib.dump(
     OUTPUT_DIR / "allocine_tokenizer.joblib",
 )
 
-# Courbes de loss
+# Figure 1 : courbes accuracy train vs val
 plt.figure(figsize=(10, 4))
-plt.plot(history_nlp.history["accuracy"], label="train acc")
-plt.plot(history_nlp.history["val_accuracy"], label="val acc")
+plt.plot(history_nlp.history["accuracy"], label="train acc", color="#0ea5e9", linewidth=2, marker="o")
+plt.plot(history_nlp.history["val_accuracy"], label="val acc", color="#10b981", linewidth=2, marker="o")
 plt.xlabel("Epoch")
 plt.ylabel("Accuracy")
 plt.title(f"Phase 5 : Allocine Bi-LSTM - acc test {acc_test:.3f}")
 plt.legend()
 plt.grid(True, alpha=0.3)
 plt.tight_layout()
-plt.savefig(OUTPUT_DIR / "fig_phase5_allocine_accuracy.png", dpi=100)
+plt.savefig(OUTPUT_DIR / "fig_phase5_allocine_accuracy.png", dpi=100, bbox_inches="tight")
+plt.show()
+
+# Figure 2 : matrice de confusion sentiment binary
+from sklearn.metrics import confusion_matrix as _cm_sentiment
+cm_sent = _cm_sentiment(test_labels_nlp, y_pred)
+
+fig, ax = plt.subplots(figsize=(5, 4))
+im = ax.imshow(cm_sent, cmap="Blues")
+ax.set_xticks([0, 1]); ax.set_yticks([0, 1])
+ax.set_xticklabels(["Negatif", "Positif"]); ax.set_yticklabels(["Negatif", "Positif"])
+ax.set_xlabel("Predit"); ax.set_ylabel("Reel")
+ax.set_title(f"Phase 5 : Confusion sentiment - acc {acc_test:.3f}, F1 {f1:.3f}")
+thresh = cm_sent.max() / 2
+for i in range(2):
+    for j in range(2):
+        ax.text(j, i, f"{cm_sent[i, j]:,}",
+                ha="center", va="center", fontsize=14,
+                color="white" if cm_sent[i, j] > thresh else "black",
+                fontweight="bold")
+plt.colorbar(im, ax=ax)
+plt.tight_layout()
+plt.savefig(OUTPUT_DIR / "fig_phase5_confusion.png", dpi=100, bbox_inches="tight")
 plt.show()
 
 print("Sauves : allocine_sentiment.keras + allocine_tokenizer.joblib")"""))
@@ -534,7 +644,21 @@ print(f"Distribution profils : {np.bincount(labels).tolist()}")
 print(f"  {PROFILS[0]:18s} : {(labels==0).sum():>5d} fenetres")
 print(f"  {PROFILS[1]:18s} : {(labels==1).sum():>5d} fenetres")
 print(f"  {PROFILS[2]:18s} : {(labels==2).sum():>5d} fenetres")
-print(f"  {PROFILS[3]:18s} : {(labels==3).sum():>5d} fenetres")"""))
+print(f"  {PROFILS[3]:18s} : {(labels==3).sum():>5d} fenetres")
+
+# EDA : distribution du ratio peak/offpeak avec quartiles
+fig, ax = plt.subplots(figsize=(10, 4))
+ax.hist(ratios, bins=80, color="#10b981", alpha=0.75, edgecolor="white")
+for qi, qv, c in zip([0.25, 0.5, 0.75], q, ["#0ea5e9", "#f59e0b", "#ef4444"]):
+    ax.axvline(qv, color=c, linestyle="--", linewidth=2, label=f"Q{int(qi * 100)} = {qv:.2f}")
+ax.set_xlabel("Ratio peak (18-21h) / offpeak (1-6h)")
+ax.set_ylabel("Frequence")
+ax.set_title(f"Phase 6 : Distribution ratio peak/offpeak - {len(ratios):,} fenetres de 7 jours")
+ax.legend()
+ax.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.savefig(OUTPUT_DIR / "fig_phase6_ratio_distribution.png", dpi=100, bbox_inches="tight")
+plt.show()"""))
 
 cells.append(code("""# Construction des sequences : X (window x features), y (label)
 # Split temporel 80/20 (jamais de shuffle)

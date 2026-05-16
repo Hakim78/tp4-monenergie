@@ -31,6 +31,12 @@ except ImportError:
     HAS_OPTION_MENU = False
 
 try:
+    import requests
+    HAS_REQUESTS = True
+except ImportError:
+    HAS_REQUESTS = False
+
+try:
     from log_inference import log_inference  # type: ignore
 except ImportError:
     def log_inference(*args, **kwargs):
@@ -703,23 +709,84 @@ def make_sentiment_gauge(score, label):
     return fig
 
 
+REGIONS_DATA = {
+    "Île-de-France": 4500, "Auvergne-Rhône-Alpes": 5200, "Hauts-de-France": 4800,
+    "Nouvelle-Aquitaine": 4100, "Occitanie": 3900, "Grand Est": 5100,
+    "Provence-Alpes-Côte d'Azur": 3700, "Pays de la Loire": 4400,
+    "Normandie": 4700, "Bretagne": 4300, "Bourgogne-Franche-Comté": 5300,
+    "Centre-Val de Loire": 4600, "Corse": 3500,
+}
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def fetch_france_geojson():
+    """Telecharge le geojson FR avec cache 24h. Tente plusieurs miroirs."""
+    if not HAS_REQUESTS:
+        return None
+    urls = [
+        "https://france-geojson.gregoiredavid.fr/repo/regions.geojson",
+        "https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/regions.geojson",
+    ]
+    for url in urls:
+        try:
+            r = requests.get(url, timeout=8)
+            if r.status_code == 200:
+                return r.json()
+        except Exception:
+            continue
+    return None
+
+
 def make_france_map():
-    regions = {
-        "Île-de-France": 4500, "Auvergne-Rhône-Alpes": 5200, "Hauts-de-France": 4800,
-        "Nouvelle-Aquitaine": 4100, "Occitanie": 3900, "Grand Est": 5100,
-        "Provence-Alpes-Côte d'Azur": 3700, "Pays de la Loire": 4400,
-        "Normandie": 4700, "Bretagne": 4300, "Bourgogne-Franche-Comté": 5300,
-        "Centre-Val de Loire": 4600, "Corse": 3500,
-    }
-    df = pd.DataFrame({"region": list(regions.keys()), "kwh_an": list(regions.values())})
-    fig = px.choropleth(
-        df, locations="region", color="kwh_an",
-        geojson="https://france-geojson.gregoiredavid.fr/repo/regions.geojson",
-        featureidkey="properties.nom", color_continuous_scale="Viridis",
-        labels={"kwh_an": "kWh/an"},
+    df = pd.DataFrame({"region": list(REGIONS_DATA.keys()), "kwh_an": list(REGIONS_DATA.values())})
+
+    geojson = fetch_france_geojson()
+
+    if geojson is not None:
+        # Carte choropleth (preferee)
+        fig = px.choropleth(
+            df, locations="region", color="kwh_an",
+            geojson=geojson, featureidkey="properties.nom",
+            color_continuous_scale="Viridis",
+            labels={"kwh_an": "kWh/an"},
+            hover_data={"region": True, "kwh_an": ":,.0f"},
+        )
+        fig.update_geos(fitbounds="locations", visible=False, projection_type="mercator")
+        fig.update_layout(
+            height=500, margin=dict(l=0, r=0, t=10, b=10),
+            coloraxis_colorbar=dict(title="kWh/an", thickness=12, len=0.7),
+            paper_bgcolor="rgba(0,0,0,0)", geo_bgcolor="rgba(0,0,0,0)",
+        )
+        return fig
+
+    # Fallback : bar chart horizontale (toujours fonctionnel)
+    df_sorted = df.sort_values("kwh_an", ascending=True)
+    fig = go.Figure(go.Bar(
+        x=df_sorted["kwh_an"],
+        y=df_sorted["region"],
+        orientation="h",
+        marker=dict(
+            color=df_sorted["kwh_an"],
+            colorscale="Viridis",
+            showscale=True,
+            colorbar=dict(title="kWh/an", thickness=12, len=0.7),
+        ),
+        hovertemplate="<b>%{y}</b><br>%{x:,.0f} kWh/an<extra></extra>",
+        text=[f"{v:,.0f}" for v in df_sorted["kwh_an"]],
+        textposition="inside",
+    ))
+    fig.update_layout(
+        height=520,
+        margin=dict(l=20, r=20, t=40, b=20),
+        title=dict(
+            text="Consommation moyenne par région (kWh/an) - carte indisponible, vue bar chart",
+            font=dict(size=14, color="#64748b"),
+            x=0.5, xanchor="center",
+        ),
+        xaxis=dict(title="kWh/an", showgrid=True, gridcolor="#f1f5f9"),
+        yaxis=dict(showgrid=False),
+        plot_bgcolor="white", paper_bgcolor="white",
     )
-    fig.update_geos(fitbounds="locations", visible=False)
-    fig.update_layout(height=500, margin=dict(l=0, r=0, t=10, b=10))
     return fig
 
 
@@ -1212,7 +1279,8 @@ def page_carte():
     c3.metric("Région max", "Grand Est")
     c4.metric("Région min", "Corse")
 
-    st.plotly_chart(make_france_map(), use_container_width=True)
+    with st.spinner("Chargement de la carte..."):
+        st.plotly_chart(make_france_map(), use_container_width=True)
 
     st.markdown('<div class="section-h">💡 Lecture de la carte</div>', unsafe_allow_html=True)
     insights = [
