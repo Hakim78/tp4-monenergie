@@ -25,6 +25,75 @@ fournisseur grâce à l'analyse d'avis. Modèles RNN/LSTM + déploiement Streaml
 | 7 | Modèles précédents | Streamlit | App MonÉnergie : upload courbe → forecast + profil |
 | 8 | - | Logging + déploiement | Streamlit Cloud + audit CSV des inférences |
 
+## Exploration data science — résultats visuels
+
+Toutes les figures sont générées automatiquement à la fin du notebook all-in-one
+exécuté sur Kaggle (le notebook se trouve dans le dossier local `TP4/kaggle/` hors du repo Git).
+Les PNG sont auto-poussés vers GitHub dans `figures/<phase>/` après chaque run.
+
+### Phase 1 · Exploration EDA — série temporelle Sceaux FR
+
+![Consommation journalière moyenne](figures/phase1_eda/fig_phase1_conso_journaliere.png)
+
+**Lecture data science** : la série Household Power Consumption (Sceaux, Île-de-France, 2006-2010) agrégée en consommation journalière moyenne révèle 3 signaux structurels :
+- **Saisonnalité annuelle marquée** : pic hivernal vers 2 kW/jour (chauffage électrique + chauffe-eau), creux estival vers 0,5 kW/jour
+- **Cycles hebdomadaires** : différentiel week-end/semaine visible dans la haute fréquence
+- **Régime non-stationnaire** : moyenne et variance évoluent dans le temps, ce qui motive l'utilisation d'un LSTM (capable de capturer ces dépendances longues) plutôt qu'un modèle ARMA classique
+
+**Implication produit** : un foyer FR a une consommation **fortement structurée temporellement** → forecast à 24h est faisable avec haute précision sans features externes (la conso passée porte 80% du signal).
+
+### Phase 2 · LSTM forecast — convergence et prédictions
+
+![Courbes de loss LSTM](figures/phase2_lstm/fig_phase2_loss.png)
+
+**Convergence** : la `train_loss` (MSE) descend en 2-3 epochs vers ~0.002 et se stabilise. La `val_loss` suit jusqu'à epoch 5 puis plateau, sans divergence → pas d'overfit sur ce dataset (~27k séquences train). EarlyStopping (patience=5) coupe à epoch 7 en restaurant les meilleurs poids.
+
+![Forecast vs réalité](figures/phase2_lstm/fig_phase2_forecast.png)
+
+**Performance** : sur 200 heures de test set, la courbe prédite (orange) suit fidèlement la vérité terrain (noir) avec **RMSE test = 0,241 kW**. Sur une moyenne ménagère ~1 kW, cela correspond à **~24% d'erreur relative** — excellent vu la complexité du signal (variations hebdomadaires + bruit minute-par-minute agrégé). Les features cycliques `hour_sin/cos` + `is_weekend` apportent un gain mesurable.
+
+### Phase 3 · LSTM vs GRU — benchmark cross-architecture
+
+![GRU vs LSTM comparison](figures/phase3_gru_vs_lstm/fig_phase3_gru_vs_lstm.png)
+
+**Verdict architecture** :
+
+| Métrique | LSTM | GRU | Δ |
+|---|---|---|---|
+| Paramètres | 20 545 | 16 129 | **-21%** |
+| RMSE test (kW) | 0,241 | 0,236 | équivalent |
+| Durée / epoch (s, T4) | 2,15 | 2,02 | **-6%** |
+
+Convergence quasi-identique sur les 7 epochs effectifs. **GRU choisi pour la prod mobile** : 21% moins de paramètres = empreinte ONNX plus légère + inference plus rapide sur device.
+
+### Phase 5 · Bi-LSTM sentiment FR — Allociné 200k avis
+
+![Accuracy training](figures/phase5_allocine/fig_phase5_allocine_accuracy.png)
+
+**Convergence NLP** : `train_acc` atteint 96% en 4 epochs, `val_acc` plateau à 93% dès l'epoch 1. L'écart train/val est sain (<3 points), pas d'overfit. EarlyStopping coupe à epoch 4.
+
+**Résultats finaux test set (20 000 avis)** :
+- Accuracy : **93,3%**
+- F1-score : **0,93**
+- Précision/rappel équilibrés sur les deux classes (Négatif / Positif)
+
+**Transférabilité** : modèle entraîné sur des avis de films FR, mais le vocabulaire générique (positif/négatif) se transfère bien aux avis Trustpilot des fournisseurs d'énergie (testé sur 4 avis simulés EDF/Engie/TotalEnergies dans le notebook).
+
+### Phase 6 · LSTM multiclasse — profil temporel peak/off-peak
+
+![Matrice de confusion profils](figures/phase6_profil/fig_phase6_confusion.png)
+
+**Tâche** : classer chaque fenêtre de 7 jours selon son ratio peak(18-21h)/off-peak(1-6h) en 4 quartiles → 4 profils types (Nocturne / Équilibre nuit / Équilibre soir / Vespertine).
+
+**Performance** :
+- Accuracy globale : 0,52 (vs baseline aléatoire 4-classes 0,25)
+- F1 macro : 0,47
+- Le modèle excelle sur les **classes extrêmes** (Nocturne precision 0,87) et a plus de mal sur les classes intermédiaires (Équilibre soir)
+
+**Lecture matrice de confusion** : les erreurs sont **majoritairement entre classes adjacentes** (Nocturne ↔ Équilibre nuit) ce qui est attendu. Aucune confusion entre classes opposées (Nocturne ↔ Vespertine) → le modèle a appris l'axe principal du ratio temporel.
+
+**Roadmap V2** : enrichir le signal avec features météo (température extérieure depuis Météo France API) pour réduire l'ambiguïté entre profils intermédiaires.
+
 ## Datasets
 
 | Fichier source | Téléchargement Kaggle | Volume |
